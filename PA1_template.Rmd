@@ -7,19 +7,175 @@ output:
 
 
 ## Loading and preprocessing the data
+We are going to assume that the dataset is in the working folder. Step 1 will be to load the data into R and see a quick preview. 
 
+```{r}
+activitydata <- read.csv('activity.csv')
+head(activitydata)
+```
+
+Lets take a look at the structure of the dataset.
+```{r}
+str(activitydata)
+```
+
+We see that date is stored as a factor. Lets convert it to the correct format.
+```{r}
+activitydata$date <- as.Date(activitydata$date)
+str(activitydata)
+```
+
+The date now is correctly formatted. Let's proceed to answer the questions.
 
 
 ## What is mean total number of steps taken per day?
+**Part 1**
 
+The goal is to make a histogram of the total steps taken per day. Using the dplyr package we can group and sum the activity data by date. Then we can plot a histogram with that data. 
+```{r}
+library(dplyr)
+activitydata_date <- group_by(activitydata,date)
+stepsperday<-summarise(activitydata_date,total=sum(steps))
+stepsperday
+```
+
+Now we plot the histogram.
+```{r}
+hist(stepsperday$total,main="Histogram of steps per day",xlab="Total steps")
+```
+
+**Part 2**
+
+The mean and median steps per day can be easily calculated . Ignore NA to get the correct responses. The mean is :
+```{r}
+mean(stepsperday$total,na.rm = TRUE)
+```
+
+The median is:
+```{r}
+median(stepsperday$total,na.rm = TRUE)
+```
 
 
 ## What is the average daily activity pattern?
 
+**Part 1**
+
+We need a time series depicting average activity (y axis) by the time interval (x axis). To do this we can group the data by time interval and summaraise it by mean. 
+
+```{r}
+library(dplyr)
+activitydata_interval <- group_by(activitydata,interval)
+stepsperinterval<-summarise(activitydata_interval,average=mean(steps,na.rm = TRUE))
+stepsperinterval
+```
+
+Now we can plot the time series using ggplot. 
+
+```{r}
+library(ggplot2)
+g<-ggplot(stepsperinterval,aes(interval,average))
+g + geom_point() + geom_line(group='1')
+```
+
+**Part 2**
+
+Based on this we observe that the interval with the maximum average steps is somewhere in the 800's . Lets find out the exact interval using which.max.
+
+```{r}
+maxinterval <- stepsperinterval[which.max(stepsperinterval$average),]
+maxinterval
+```
+
+So we can see that it is `r maxinterval[1,1]` 
+
 
 
 ## Imputing missing values
+**Part 1**
 
+We need to find the total number of missing values in the dataset. This can be seen using the summary function. 
+
+```{r}
+summary(activitydata)
+```
+
+We can see that there are 2304 NA's in the steps column. 
+
+**Part 2**
+
+The strategy we use to replace these values is to calculate the mean for that interval and use it to replace the missing value. 
+
+The idea behind this is that on an average a person is expected to maintain a similar activity level throughout the day. This will let us replicate that. 
+
+We first right a function to replace an NA value with a mean value.
+
+```{r}
+impute.mean<-function(x) replace(x,is.na(x),mean(x,na.rm=TRUE))
+```
+
+**Part 3**
+
+We can now replicate the original dataset and use dplyr to apply this function to all the records
+
+```{r}
+activitydata_imputed <- activitydata %>% group_by(interval) %>% mutate(steps=impute.mean(steps))
+head(activitydata_imputed)
+```
+
+As we can observe, the previously missing values have been replaced by the interval averages. 
+
+**Part 4**
+
+We can now recreate the histogram for the new dataset.
+```{r}
+activitydata_imputed_date <-group_by(activitydata_imputed,date)
+stepsperday_imputed<-summarise(activitydata_imputed_date,total=sum(steps))
+hist(stepsperday_imputed$total,main="Histogram of steps per day",xlab="Total steps")
+```
+
+Notice that compared to the original histogram the frequencies are much higher in the new one. 
+
+Let's see the mean and median for the imputed dataset. Notice that na.rm is not needed this time as there are no NA values in the dataset.
+
+The mean is:
+```{r}
+mean(stepsperday_imputed$total)
+```
+
+The median is:
+```{r}
+median(stepsperday_imputed$total)
+```
+
+The mean remains the same but the median is now equal to the mean in the imputed dataset.
 
 
 ## Are there differences in activity patterns between weekdays and weekends?
+We can use a convenient function called is.weekend in the chron package along with the mutate function to add a weekday,weekend column. 
+
+```{r}
+library(chron)
+activitydata_imputed<- activitydata_imputed %>% mutate(daytype=ifelse(is.weekend(date),'weekend','weekday'))
+```
+
+We then convert the daytype column to a factor and verify the results.
+
+```{r}
+activitydata_imputed$daytype<-as.factor(activitydata_imputed$daytype)
+str(activitydata_imputed)
+head(activitydata_imputed)
+```
+
+**Part 2**
+
+We can now create a panel time series plot to see differences in activity across weekdays and weekends. 
+
+```{r}
+
+activitydata_imputed_interval <- group_by(activitydata_imputed,daytype,interval)
+stepsperinterval_imputed<-summarise(activitydata_imputed_interval,average=mean(steps,na.rm = TRUE))
+g<-ggplot(stepsperinterval_imputed,aes(interval,average))
+g + facet_grid(daytype ~.) + geom_point() + geom_line(group='1')
+```
+
